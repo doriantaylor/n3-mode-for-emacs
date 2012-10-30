@@ -28,6 +28,146 @@ For detail, see `comment-dwim'."
    (let ((deactivate-mark nil) (comment-start "#") (comment-end ""))
      (comment-dwim arg)))
 
+;; run a process over a buffer
+(defun n3-process-buffer (program &optional infile destination &rest args)
+  "Run a process over a buffer."
+  (let* ((destination (or destination "*n3-process-output*"))
+         (in  (get-buffer infile))
+         (buf (get-buffer-create destination))
+         output prepoint)
+    (save-excursion
+      (set-buffer infile)
+      (apply 'call-process-region
+             (append
+              (list (point-min) (point-max) program nil destination t) args))
+      (set-buffer buf)
+      (setq output (buffer-substring (point-min) (point-max)))
+      (kill-buffer buf)
+      )
+    output))
+
+;; run a process over a file
+(defun n3-process-file (program &optional infile destination &rest args)
+  "Run a process over a file."
+  (let* ((destination (or destination "*n3-process-output*"))
+         (buf (get-buffer-create destination))
+         output prepoint)
+    (when (not (file-readable-p infile))
+      (error 
+       (concat "Attempt to run process over an unreadable file:" infile)))
+    (message infile)
+    (save-excursion
+      (set-buffer buf)
+      (setq prepoint (point))
+      (let ((code (apply 'call-process
+                          (append (list program infile destination nil) args))))
+        (when (/= code 0)
+          (warn (format "Process %s exited with %d" program code))))
+      (setq output (buffer-substring prepoint (point-max)))
+      (kill-buffer buf)
+      )
+    output))
+
+(defun n3-process-file-or-buffer
+  (program &optional infile destination &rest args)
+  "Run a process over either a filename or a buffer, depending on
+what it is. Returns the process's output as a string."
+
+  ; if it is a buffer but not a readable file, then warn
+  ; if it is a string but not a readable file, then error
+  (let* ((buf (or (get-buffer infile) (current-buffer)))
+         (filename (or (buffer-file-name buf) infile)))
+    (cond ((file-readable-p filename)
+           (apply 'n3-process-file
+                  (append (list program filename destination) args)))
+          ((or buf infile)
+           (display-warning :error "An unsaved buffer may not parse correctly.")
+           (apply 'n3-process-buffer
+                  (append (list program buf destination) args)))
+          (t (display-warning
+              :error
+              "I need a filename (preferred) or buffer to work with.")))))
+
+;; 
+(defun n3-make-sparql-query (string)
+  "Return a SPARQL query that will return subject-literal pairs."
+  (interactive "sValue: ")
+  ; XXX this will fail if you put quotation marks in it, obvs
+  (concat "SELECT DISTINCT ?s ?o "
+          "WHERE { ?s ?p ?o FILTER (isLITERAL(?o) && regex(str(?o), \"^.*"
+          string ".*$\", \"i\")) }"))
+
+;;
+(defun n3-get-subject-list (literal &optional buffer)
+  "Return an alist of the form (subject . literal) for subjects
+that match a given literal."
+  (interactive "sValue: \nbBuffer: ")
+  (let* ((my-buffer (current-buffer))
+         (work-buffer (get-buffer (or buffer my-buffer)))
+         (roqet (or (executable-find "roqet")
+                    (error "Can't find roqet executable!")))
+         (output (n3-process-file-or-buffer
+                   roqet work-buffer nil "-D" "file:/dev/stdin" "-q" "-e"
+                   (n3-make-sparql-query literal)))
+         (end (length output))
+         (pos 0)
+         options)
+    ; return an alist of the match pairs
+    (while
+        (string-match
+         "result: \\[s=uri\\(<[^>]*>\\), *o=string(\"+\\(.*?\\)\"+[^\"]+)\\]"
+         output pos)
+      (setq pos (match-end 2))
+      ;(message (match-string 1 output))
+      ; this will build the list backwards but whatever
+      (setq options
+            (cons (cons (match-string 1 output) (match-string 2 output))
+                  options)))
+    options))
+
+;; 
+(defun n3-prepare-options (options)
+  "Given an alist of strings, return a string of enumerated options."
+  (let ((nargs (length options)) (out "") (pos 1))
+    (while options
+      (setq out (concat out (format "%d) %s\n" pos (cdr (car options)))))
+      (setq options (cdr options))
+      (setq pos (1+ pos)))
+    out))
+
+;; not sure how else to curry an interactive function
+(defun n3-make-select-option (options)
+  "Generate an interactive command to choose from multiple subjects."
+  (lambda (which)
+    (interactive (list (read-string (n3-prepare-options options))))
+    (let ((which (string-to-number which)))
+      (when (= which 0)
+        (setq which 1)
+        (message "Using the first element as a default"))
+      (cond ((> which (length options))
+             (message (format "Index %d longer than list (%d)"
+                              which (length options))))
+            (t (car (nth (- which 1) options)))))))
+
+;; a more generic version
+(defun n3-subject-for (literal &optional buffer)
+  "Return the subject found for the given literal from the given buffer."
+  (interactive "sLiteral: \nbBuffer: ")
+  (let ((options (n3-get-subject-list literal buffer)))
+    (if (null options)
+        (progn (message (format "No results found for %s" literal)) nil)
+      (if (= (length options) 1)
+          (car (car options))
+        (call-interactively (n3-make-select-option options))))))
+
+;; 
+(defun n3-insert-subject-for-this-buffer (literal)
+  "Insert the subject found for the given literal into the current buffer."
+  (interactive "sLiteral: ")
+  (let ((subject (n3-subject-for literal)))
+    (when (not (null subject))
+      (insert subject))))
+
 (setq n3-highlights
   '(("\\(@prefix\\)\\>" 1 font-lock-keyword-face t)
     ("\\(a\\)\\>" 1 font-lock-keyword-face t)
