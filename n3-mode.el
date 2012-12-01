@@ -115,7 +115,7 @@ that match a given literal."
     ; return an alist of the match pairs
     (while
         (string-match
-         "result: \\[s=uri\\(<[^>]*>\\), *o=string(\"+\\(.*?\\)\"+[^\"]+)\\]"
+         "result: \\[s=uri\\(<[^>]*>\\), *o=string(\"+\\(.*?\\)\"+[^\"]*)\\]"
          output pos)
       (setq pos (match-end 2))
       ;(message (match-string 1 output))
