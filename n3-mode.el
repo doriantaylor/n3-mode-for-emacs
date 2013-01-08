@@ -61,7 +61,7 @@ For detail, see `comment-dwim'."
       (setq prepoint (point))
       (let ((code (apply 'call-process
                           (append (list program infile destination nil) args))))
-        (when (/= code 0)
+        (when (and (/= code 0) (/= code 2))
           (warn (format "Process %s exited with %d" program code))))
       (setq output (buffer-substring prepoint (point-max)))
       (kill-buffer buf)
@@ -107,7 +107,8 @@ that match a given literal."
          (roqet (or (executable-find "roqet")
                     (error "Can't find roqet executable!")))
          (output (n3-process-file-or-buffer
-                   roqet work-buffer nil "-D" "file:/dev/stdin" "-q" "-e"
+                   roqet work-buffer nil ;"-W" "100" "-d" "debug"
+                   "-q" "-D" "file:/dev/stdin" "-e"
                    (n3-make-sparql-query literal)))
          (end (length output))
          (pos 0)
@@ -189,8 +190,12 @@ that match a given literal."
   ;; syntax highlighting
   (setq font-lock-defaults '(n3-highlights))
 
+  ;; mode name
+  (setq mode-name "N3")
+
   ;; modify the keymap M-; comments/uncomments region
   (define-key n3-mode-map [remap comment-dwim] 'n3-comment-dwim)
+  (define-key n3-mode-map (kbd "C-c c") 'n3-insert-subject-for-this-buffer)
   ;; comments: “# ...” 
   (modify-syntax-entry ?# "< b" n3-mode-syntax-table)
   (modify-syntax-entry ?\n "> b" n3-mode-syntax-table)
