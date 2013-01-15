@@ -1,5 +1,7 @@
 ;;; n3-mode.el --- mode for Notation 3
 
+;; Version: 0.2
+
 ;; Copyright (c) 2003-2007 Hugo Haas <hugo@larve.net>
 ;; re-worked and re-published by kurtjx (c) 2010 <kurtjx@gmail.com>
 
@@ -203,3 +205,4 @@ that match a given literal."
   ;; description
   "Mode for Notation 3 documents."
 )
+;;; n3-mode.el ends here
