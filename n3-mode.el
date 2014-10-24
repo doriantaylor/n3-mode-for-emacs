@@ -205,4 +205,6 @@ that match a given literal."
   ;; description
   "Mode for Notation 3 documents."
 )
+
+(provide 'n3-mode)
 ;;; n3-mode.el ends here
